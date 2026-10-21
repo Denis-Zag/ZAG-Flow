@@ -1,0 +1,125 @@
+name: zag-flow
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+      registry:
+        condition: service_started
+    networks:
+      - edge
+      - internal
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: >-
+        postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    networks:
+      - internal
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+  pgadmin:
+    image: dpage/pgadmin4:9.18
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "True"
+    ports:
+      - "127.0.0.1:${PGADMIN_HOST_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+  registry:
+    image: registry:3
+    restart: unless-stopped
+    environment:
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: ZAG Flow Registry
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      REGISTRY_HTTP_SECRET: ${REGISTRY_HTTP_SECRET}
+      REGISTRY_LOG_LEVEL: info
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    expose:
+      - "5000"
+    volumes:
+      - registry_data:/var/lib/registry
+      - ./registry/auth:/auth:ro
+    networks:
+      - internal
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    restart: unless-stopped
+    command:
+      - --label-enable
+      - --monitor-only
+      - --interval
+      - "86400"
+    environment:
+      TZ: Europe/Moscow
+      # Watchtower 1.7.1 predates recent Docker Engine releases.
+      # An explicit supported API version prevents a restart loop.
+      DOCKER_API_VERSION: "1.44"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal
+
+networks:
+  edge:
+  internal:
+    internal: true
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  registry_data:
