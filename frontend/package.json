@@ -1,0 +1,10 @@
+{
+  "name": "zag-flow-frontend",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Сборка статического интерфейса ZAG Flow",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

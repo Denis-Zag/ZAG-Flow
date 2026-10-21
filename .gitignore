@@ -14,3 +14,6 @@ registry/auth/htpasswd
 .vscode/
 .DS_Store
 Thumbs.db
+frontend/dist/
+frontend/node_modules/
+.local/

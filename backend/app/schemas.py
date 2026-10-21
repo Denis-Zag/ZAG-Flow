@@ -2,18 +2,48 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+
+class ServiceCreate(BaseModel):
+    """Название услуги и допустимый диапазон бюджета в рублях."""
+
+    name: str = Field(min_length=2, max_length=80)
+    budget_min: int = Field(ge=0, le=100_000_000)
+    budget_max: int = Field(ge=0, le=100_000_000)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def normalize_name(cls, value: object) -> object:
+        """Нормализовать пробелы до проверки длины названия."""
+
+        return " ".join(value.split()) if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_budget(self) -> "ServiceCreate":
+        """Не принимать перевёрнутый диапазон бюджета."""
+
+        if self.budget_max < self.budget_min:
+            raise ValueError("Максимальный бюджет должен быть не меньше минимального")
+        return self
+
+
+class ServiceRead(ServiceCreate):
+    """Публичная карточка услуги без служебных данных."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int
 
 
 class AutomationRequestCreate(BaseModel):
     """Данные, которые принимает форма заявки."""
 
-    task_type: str = Field(min_length=2, max_length=80)
+    service_id: int = Field(gt=0)
     task_description: str = Field(min_length=30, max_length=2000)
     business_name: str | None = Field(default=None, max_length=120)
     business_niche: str = Field(min_length=2, max_length=120)
     expected_result: str = Field(min_length=15, max_length=1000)
-    budget: str = Field(min_length=2, max_length=80)
+    budget: int = Field(ge=0, le=100_000_000)
     deadline: str | None = Field(default=None, max_length=100)
 
     contact_name: str = Field(min_length=2, max_length=100)
@@ -26,12 +56,10 @@ class AutomationRequestCreate(BaseModel):
     website: str = Field(default="", max_length=200, exclude=True)
 
     @field_validator(
-        "task_type",
         "task_description",
         "business_name",
         "business_niche",
         "expected_result",
-        "budget",
         "deadline",
         "contact_name",
         "contact_phone",

@@ -52,12 +52,71 @@ if (form) {
   const successState = document.querySelector("[data-success]");
   const requestId = document.querySelector("[data-request-id]");
   const newRequestButton = document.querySelector("[data-new-request]");
+  const serviceSelect = form.querySelector('[name="service_id"]');
+  const serviceStatus = document.querySelector("#service-status");
+  const retryServices = form.querySelector("[data-retry-services]");
+  const budgetInput = form.querySelector('[name="budget"]');
+  const budgetValue = form.querySelector("[data-budget-value]");
+  const budgetRange = form.querySelector("[data-budget-range]");
+  const rubles = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 });
+  let services = [];
   let currentStep = 0;
 
   const setStatus = (message = "", type = "error") => {
     status.textContent = message;
     status.style.color = type === "success" ? "var(--accent-soft)" : "var(--danger)";
   };
+
+  const updateBudget = () => {
+    const selected = services.find((service) => String(service.id) === serviceSelect.value);
+    budgetInput.disabled = !selected;
+    if (!selected) {
+      budgetValue.textContent = "";
+      budgetRange.textContent = "Сначала выберите услугу на первом шаге.";
+      return;
+    }
+    budgetInput.min = String(selected.budget_min);
+    budgetInput.max = String(selected.budget_max);
+    budgetInput.step = "1";
+    budgetInput.value = String(Math.round((selected.budget_min + selected.budget_max) / 2));
+    budgetValue.textContent = rubles.format(Number(budgetInput.value));
+    budgetRange.textContent = `${rubles.format(selected.budget_min)} — ${rubles.format(selected.budget_max)}`;
+  };
+
+  const loadServices = async () => {
+    serviceSelect.disabled = true;
+    nextButton.disabled = true;
+    retryServices.hidden = true;
+    serviceStatus.textContent = "Получаем актуальный каталог услуг…";
+    try {
+      const response = await fetch("/api/services", { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error("Каталог временно недоступен. Повторите загрузку.");
+      const payload = await response.json();
+      if (!Array.isArray(payload)) throw new Error("Не удалось прочитать каталог услуг.");
+      services = payload;
+      serviceSelect.replaceChildren(new Option("Выберите услугу", ""));
+      services.forEach((service) => serviceSelect.add(new Option(
+        `${service.name} · ${rubles.format(service.budget_min)}–${rubles.format(service.budget_max)}`,
+        String(service.id)
+      )));
+      if (!services.length) throw new Error("Услуги ещё не опубликованы. Попробуйте позже.");
+      serviceSelect.disabled = false;
+      nextButton.disabled = false;
+      serviceStatus.textContent = "Бюджет на следующем шаге зависит от выбранной услуги.";
+    } catch (error) {
+      serviceSelect.replaceChildren(new Option("Каталог недоступен", ""));
+      serviceStatus.textContent = error.name === "TimeoutError"
+        ? "Загрузка заняла слишком много времени. Повторите попытку." : error.message;
+      retryServices.hidden = false;
+    }
+    updateBudget();
+  };
+
+  serviceSelect.addEventListener("change", updateBudget);
+  budgetInput.addEventListener("input", () => {
+    budgetValue.textContent = rubles.format(Number(budgetInput.value));
+  });
+  retryServices.addEventListener("click", loadServices);
 
   const showStep = (index) => {
     currentStep = index;
@@ -121,6 +180,8 @@ if (form) {
 
     const data = Object.fromEntries(new FormData(form).entries());
     data.consent = data.consent === "on";
+    data.service_id = Number(data.service_id);
+    data.budget = Number(data.budget);
     data.source = "zag-flow-landing";
 
     submitButton.disabled = true;
@@ -132,11 +193,17 @@ if (form) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
+        signal: AbortSignal.timeout(20000),
       });
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(payload.detail || "Не удалось отправить заявку.");
+        throw new Error(typeof payload.detail === "string"
+          ? payload.detail : "Проверьте поля заявки и выбранную услугу.");
+      }
+
+      if (!payload.request_id || payload.status !== "accepted") {
+        throw new Error("Не получено подтверждение заявки. Обратитесь к администратору.");
       }
 
       form.hidden = true;
@@ -154,10 +221,12 @@ if (form) {
 
   newRequestButton?.addEventListener("click", () => {
     form.reset();
+    updateBudget();
     form.hidden = false;
     successState.hidden = true;
     showStep(0);
   });
 
   showStep(0);
+  loadServices();
 }

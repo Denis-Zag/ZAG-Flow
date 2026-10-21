@@ -7,11 +7,11 @@
       name="description"
       content="ZAG Flow помогает превратить ручные задачи бизнеса в понятный план автоматизации."
     />
-    <meta name="theme-color" content="#07100e" />
+    <meta name="theme-color" content="#fbfaf7" />
     <title>ZAG Flow — Task Automator</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=0.1.1" />
-    <script src="/app.js?v=0.1.1" defer></script>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Перейти к содержанию</a>
@@ -223,14 +223,14 @@
                   <div><h3 id="task-step-title">Что нужно автоматизировать?</h3><p>Выберите ближайшее направление и опишите задачу.</p></div>
                 </div>
 
-                <fieldset class="choice-grid">
-                  <legend class="visually-hidden">Направление задачи</legend>
-                  <label class="choice"><input type="radio" name="task_type" value="Заявки и обращения" required /><span>Заявки</span></label>
-                  <label class="choice"><input type="radio" name="task_type" value="Telegram-бот" /><span>Telegram-бот</span></label>
-                  <label class="choice"><input type="radio" name="task_type" value="API и интеграция" /><span>API</span></label>
-                  <label class="choice"><input type="radio" name="task_type" value="AI-помощник" /><span>AI-помощник</span></label>
-                  <label class="choice"><input type="radio" name="task_type" value="Другое" /><span>Другое</span></label>
-                </fieldset>
+                <label class="field service-field">
+                  <span>Услуга <b>*</b></span>
+                  <select name="service_id" required disabled aria-describedby="service-status">
+                    <option value="">Загружаем услуги…</option>
+                  </select>
+                </label>
+                <p class="service-status" id="service-status" role="status">Получаем актуальный каталог услуг.</p>
+                <button class="button button-ghost" type="button" data-retry-services hidden>Повторить загрузку</button>
 
                 <label class="field full-field">
                   <span>Опишите текущий процесс <b>*</b></span>
@@ -249,7 +249,7 @@
                   <label class="field"><span>Компания или проект</span><input type="text" name="business_name" maxlength="120" placeholder="Можно оставить пустым" /></label>
                   <label class="field"><span>Сфера бизнеса <b>*</b></span><input type="text" name="business_niche" maxlength="120" required placeholder="Например: автосервис" /></label>
                   <label class="field full-field"><span>Какой результат нужен <b>*</b></span><textarea name="expected_result" rows="4" minlength="15" maxlength="1000" required placeholder="Что должно стать быстрее, проще или надёжнее?"></textarea></label>
-                  <label class="field"><span>Ориентир по бюджету <b>*</b></span><select name="budget" required><option value="">Выберите диапазон</option><option>До 30 000 ₽</option><option>30 000–70 000 ₽</option><option>70 000–150 000 ₽</option><option>Более 150 000 ₽</option><option>Нужно оценить</option></select></label>
+                  <label class="field budget-field"><span>Ориентир по бюджету <b>*</b> <output data-budget-value></output></span><input type="range" name="budget" min="0" max="0" value="0" step="1000" required disabled /><small data-budget-range>Сначала выберите услугу на первом шаге.</small></label>
                   <label class="field"><span>Желаемый срок</span><input type="text" name="deadline" maxlength="100" placeholder="Например: до конца месяца" /></label>
                 </div>
               </section>
@@ -283,7 +283,7 @@
 
             <section class="success-state" data-success hidden aria-live="polite">
               <span class="success-icon" aria-hidden="true">✓</span>
-              <p class="eyebrow"><span></span> Заявка принята</p>
+              <p class="eyebrow"><span></span> Заявка отправлена!</p>
               <h3>Спасибо! Вводные уже в потоке.</h3>
               <p>Номер заявки: <strong data-request-id></strong></p>
               <button class="button button-ghost" type="button" data-new-request>Отправить ещё одну</button>

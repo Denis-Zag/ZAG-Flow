@@ -3,10 +3,24 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
+
+
+class Service(Base):
+    """Доступная услуга с ориентировочным диапазоном бюджета в рублях."""
+
+    __tablename__ = "services"
+    __table_args__ = (
+        CheckConstraint("budget_min >= 0 AND budget_max >= budget_min"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    budget_min: Mapped[int] = mapped_column(Integer, nullable=False)
+    budget_max: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class AutomationRequest(Base):
@@ -19,6 +33,8 @@ class AutomationRequest(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     status: Mapped[str] = mapped_column(String(32), default="new", nullable=False)
+    # В записях предыдущей версии связь с каталогом может отсутствовать.
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id"))
 
     task_type: Mapped[str] = mapped_column(String(80), nullable=False)
     task_description: Mapped[str] = mapped_column(Text, nullable=False)
