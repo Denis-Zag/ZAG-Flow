@@ -1,6 +1,6 @@
 """Настройка подключения к базе данных."""
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -14,6 +14,12 @@ def create_database(database_url: str) -> tuple[Engine, sessionmaker]:
 
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
+    if database_url.startswith("sqlite"):
+        @event.listens_for(engine, "connect")
+        def enable_foreign_keys(connection, _):
+            """Соблюдать связи и в локальной SQLite-базе."""
+
+            connection.execute("PRAGMA foreign_keys=ON")
     session_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     return engine, session_factory
 

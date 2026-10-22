@@ -1,0 +1,11 @@
+[Unit]
+Description=Check ZAG Flow TLS renewal four times a day
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:00:00
+RandomizedDelaySec=30min
+Persistent=true
+Unit=zag-flow-certbot.service
+
+[Install]
+WantedBy=timers.target

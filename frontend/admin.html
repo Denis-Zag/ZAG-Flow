@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>ZAG Flow — управление</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/admin.css" />
+  <script src="/admin.js" defer></script>
+</head>
+<body class="admin-body">
+  <header class="admin-header">
+    <a href="/" class="admin-brand"><span class="brand-square">ZF</span><span>ZAG Flow<small>ПАНЕЛЬ УПРАВЛЕНИЯ</small></span></a>
+    <div class="header-actions"><a href="/" target="_blank" rel="noopener">Открыть сайт ↗</a><span id="account"></span><button id="logout" class="button button-ghost" hidden>Выйти</button></div>
+  </header>
+  <main class="admin-shell">
+    <section id="auth-view" class="auth-card">
+      <span class="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</span>
+      <h1 id="auth-title">Вход в управление</h1>
+      <p class="muted">Услуги, обращения и статистика — в одном месте.</p>
+      <form id="auth-form">
+        <label class="field"><span>Логин</span><input name="username" autocomplete="username" minlength="3" maxlength="80" pattern="[a-zA-Z0-9_.\-]+" required /></label>
+        <label class="field"><span>Пароль</span><input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required /></label>
+        <label class="field" id="setup-field" hidden><span>Ключ первичной настройки</span><input name="setup_token" type="password" autocomplete="off" maxlength="300" /><small>Нужен один раз, чтобы посторонний посетитель не мог создать администратора.</small></label>
+        <button type="submit" class="button button-primary" id="auth-submit">Войти →</button>
+      </form>
+      <button type="button" id="register-toggle" class="text-button" hidden>Зарегистрироваться</button>
+      <p id="auth-message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="workspace" hidden>
+      <div class="workspace-heading"><div><span class="eyebrow">ОТ ОБРАЩЕНИЯ К ДЕЙСТВИЮ</span><h1>Обзор и управление</h1><p class="muted">Актуальный каталог, приоритеты и поведение посетителей.</p></div><button id="refresh" class="button button-ghost">Обновить данные ↻</button></div>
+      <nav class="admin-tabs" aria-label="Разделы управления">
+        <button data-tab="services" aria-selected="true">Услуги</button>
+        <button data-tab="requests" aria-selected="false">Заявки</button>
+        <button data-tab="analytics" aria-selected="false">Статистика пользователей</button>
+      </nav>
+      <p id="workspace-message" role="status" aria-live="polite"></p>
+
+      <section id="services-view" class="admin-panel">
+        <div class="panel-heading"><div><h2>Каталог услуг</h2><p class="muted">Изменения сразу доступны в форме на сайте.</p></div><button id="add-service" class="button button-primary">+ Добавить услугу</button></div>
+        <div class="table-scroll"><table><thead><tr><th>Услуга</th><th>Минимум, ₽</th><th>Максимум, ₽</th><th>Действия</th></tr></thead><tbody id="services-body"></tbody></table></div>
+      </section>
+
+      <section id="requests-view" hidden>
+        <div id="priority-summary" class="summary-grid"></div>
+        <div class="admin-panel"><div class="panel-heading"><div><h2>Очередь обращений</h2><p class="muted">Сначала высокий балл; при равенстве — более новая заявка.</p></div><span id="requests-count"></span></div>
+          <div class="table-scroll"><table><thead><tr><th>Контакт / компания</th><th>Услуга</th><th>Бюджет</th><th>Срок</th><th>Приоритет</th><th></th></tr></thead><tbody id="requests-body"></tbody></table></div>
+          <div class="pagination"><button id="previous-page" class="button button-ghost">← Назад</button><span id="page-label"></span><button id="next-page" class="button button-ghost">Далее →</button></div>
+        </div>
+      </section>
+
+      <section id="analytics-view" hidden>
+        <div id="time-summary" class="summary-grid"></div>
+        <p class="muted" id="metric-period"></p>
+        <div class="analytics-grid">
+          <section class="admin-panel"><div class="panel-heading"><div><h2>Карта движения курсора</h2><p class="muted">Положение на всей странице, в процентах.</p></div><button id="expand-map" class="button button-ghost">На весь экран ↗</button></div><canvas id="heatmap" width="900" height="560" aria-label="Карта нормализованных координат курсора"></canvas><p id="map-caption" class="muted"></p></section>
+          <section class="admin-panel"><h2>Нажатия на элементы</h2><ul id="click-summary" class="click-list"></ul><p class="muted">Только метки кнопок и ссылок. Содержимое полей формы не записывается.</p></section>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="service-dialog"><form id="service-form"><div class="panel-heading"><h2 id="service-title">Новая услуга</h2><button type="button" class="close-dialog" aria-label="Закрыть">×</button></div><input name="id" type="hidden" /><label class="field"><span>Название</span><input name="name" minlength="2" maxlength="80" required /></label><div class="budget-fields"><label class="field"><span>Минимум, ₽</span><input name="budget_min" type="number" min="0" max="100000000" step="1" required /></label><label class="field"><span>Максимум, ₽</span><input name="budget_max" type="number" min="0" max="100000000" step="1" required /></label></div><p id="service-message" role="status"></p><button class="button button-primary" type="submit">Сохранить услугу</button></form></dialog>
+  <dialog id="request-dialog"><div class="panel-heading"><h2>Карточка обращения</h2><button type="button" class="close-dialog" aria-label="Закрыть">×</button></div><div id="request-details"></div></dialog>
+  <dialog id="map-dialog" class="map-dialog"><div class="panel-heading"><h2>Карта движения курсора</h2><button type="button" class="close-dialog" aria-label="Закрыть">×</button></div><canvas id="large-heatmap" width="1200" height="700"></canvas><p class="muted">X — ширина страницы; Y — положение от начала до конца страницы. Относительные координаты позволяют сопоставлять окна разных размеров.</p></dialog>
+</body>
+</html>

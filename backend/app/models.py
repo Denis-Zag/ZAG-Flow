@@ -3,7 +3,10 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String,
+    Text, UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -51,3 +54,31 @@ class AutomationRequest(Base):
     comments: Mapped[str | None] = mapped_column(Text)
     consent: Mapped[bool] = mapped_column(Boolean, nullable=False)
     source: Mapped[str] = mapped_column(String(80), default="zag-flow-landing", nullable=False)
+
+
+class Admin(Base):
+    """Единственный первичный администратор; ограничение защищает от гонки регистрации."""
+
+    __tablename__ = "admins"
+    __table_args__ = (CheckConstraint("id = 1"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(300), nullable=False)
+
+
+class BehaviorMetric(Base):
+    """Секундный снимок анонимного посещения без содержимого полей формы."""
+
+    __tablename__ = "behavior_metrics"
+    __table_args__ = (UniqueConstraint("session_id", "sequence"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    session_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    time_on_page: Mapped[int] = mapped_column(Integer, nullable=False)
+    buttons_clicked: Mapped[dict] = mapped_column(JSON, nullable=False)
+    cursor_positions: Mapped[list] = mapped_column(JSON, nullable=False)

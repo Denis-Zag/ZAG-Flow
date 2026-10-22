@@ -1,7 +1,6 @@
 """HTTP API для приёма заявок ZAG Flow."""
 
 import os
-import secrets
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 
@@ -10,9 +9,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from jwt import InvalidTokenError
 
 from .database import create_database, initialize_database
-from .models import AutomationRequest, Service
+from .models import Admin, AutomationRequest, Service
+from .admin_api import install_admin_routes
+from .security import read_token
 from .schemas import (
     AutomationRequestAccepted, AutomationRequestCreate, HealthResponse,
     ServiceCreate, ServiceRead,
@@ -21,13 +23,17 @@ from .schemas import (
 DEFAULT_DATABASE_URL = "sqlite+pysqlite:///./data/zag_flow.db"
 
 
-def create_app(database_url: str | None = None, admin_token: str | None = None) -> FastAPI:
+def create_app(
+    database_url: str | None = None, admin_token: str | None = None,
+    jwt_secret: str | None = None,
+) -> FastAPI:
     """Создать приложение с отдельным подключением к базе данных."""
 
     selected_url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     engine, session_factory = create_database(selected_url)
     selected_token = admin_token if admin_token is not None else os.getenv("SERVICE_ADMIN_TOKEN", "")
-    bearer = HTTPBearer(auto_error=False, scheme_name="ServiceAdmin")
+    selected_secret = jwt_secret if jwt_secret is not None else os.getenv("SECRET_KEY", "")
+    bearer = HTTPBearer(auto_error=False, scheme_name="AdminJWT")
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -38,7 +44,7 @@ def create_app(database_url: str | None = None, admin_token: str | None = None) 
     application = FastAPI(
         title="ZAG Flow API",
         description="API приёма заявок на автоматизацию",
-        version="0.2.0",
+        version="0.3.0",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
@@ -54,18 +60,37 @@ def create_app(database_url: str | None = None, admin_token: str | None = None) 
 
     def require_admin(
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-    ) -> None:
-        """Разрешить изменение каталога только со служебным ключом."""
+        session: Session = Depends(get_session),
+    ) -> Admin:
+        """Проверить JWT и существование администратора в текущей базе."""
 
-        if not selected_token:
-            raise HTTPException(status_code=503, detail="Редактирование каталога отключено")
-        if credentials is None or not secrets.compare_digest(
-            credentials.credentials.encode(), selected_token.encode()
-        ):
+        if len(selected_secret.encode()) < 32:
+            raise HTTPException(status_code=503, detail="Авторизация не настроена")
+        try:
+            if credentials is None:
+                raise InvalidTokenError()
+            username = read_token(credentials.credentials, selected_secret)
+            admin = session.get(Admin, 1)
+            if admin is None or username != admin.username:
+                raise InvalidTokenError()
+            return admin
+        except InvalidTokenError as error:
             raise HTTPException(
-                status_code=401, detail="Нужен служебный ключ",
+                status_code=401, detail="Необходим действующий вход администратора",
                 headers={"WWW-Authenticate": "Bearer"},
-            )
+            ) from error
+
+    install_admin_routes(application, get_session, require_admin, selected_secret, selected_token)
+
+    @application.middleware("http")
+    async def private_responses(request, call_next):
+        """Не сохранять учётные данные, заявки и статистику в кеше браузера."""
+
+        response = await call_next(request)
+        path = request.url.path.removeprefix(request.scope.get("root_path", ""))
+        if path.startswith(("/api/auth", "/api/behavior-metrics", "/api/requests")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     @application.get("/api/services", response_model=list[ServiceRead], tags=["services"])
     def get_services(session: Session = Depends(get_session)) -> list[Service]:
@@ -93,6 +118,44 @@ def create_app(database_url: str | None = None, admin_token: str | None = None) 
             session.rollback()
             raise HTTPException(status_code=503, detail="Не удалось сохранить услугу") from error
         return row
+
+    @application.put("/api/services/{service_id}", response_model=ServiceRead,
+                     tags=["services"], dependencies=[Depends(require_admin)])
+    def update_service(
+        service_id: int, payload: ServiceCreate, session: Session = Depends(get_session),
+    ) -> Service:
+        """Изменить каталог, сохранив снимок названия в прежних заявках."""
+
+        row = session.get(Service, service_id)
+        if row is None:
+            raise HTTPException(404, "Услуга не найдена")
+        for key, value in payload.model_dump().items():
+            setattr(row, key, value)
+        try:
+            session.commit()
+        except IntegrityError as error:
+            session.rollback()
+            raise HTTPException(409, "Услуга с таким названием уже есть") from error
+        return row
+
+    @application.delete("/api/services/{service_id}", status_code=204,
+                        tags=["services"], dependencies=[Depends(require_admin)])
+    def delete_service(service_id: int, session: Session = Depends(get_session)):
+        """Удалить неиспользуемую услугу без удаления связанных заявок."""
+
+        row = session.get(Service, service_id)
+        if row is None:
+            raise HTTPException(404, "Услуга не найдена")
+        if session.scalar(select(AutomationRequest.id).where(
+            AutomationRequest.service_id == service_id
+        ).limit(1)):
+            raise HTTPException(409, "Услуга используется в заявках и не может быть удалена")
+        session.delete(row)
+        try:
+            session.commit()
+        except IntegrityError as error:
+            session.rollback()
+            raise HTTPException(409, "Услуга используется в заявках") from error
 
     @application.get("/api/health", response_model=HealthResponse, tags=["service"])
     def health(session: Session = Depends(get_session)) -> HealthResponse:

@@ -1,0 +1,8 @@
+services:
+  frontend:
+    ports:
+      - "443:443"
+    volumes:
+      - ./deployment/https/nginx:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/lib/letsencrypt:/var/www/certbot:ro

@@ -1,0 +1,88 @@
+name: zag-flow-admin
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        PUBLIC_BASE_PATH: ${PUBLIC_BASE_PATH-/next}
+    restart: unless-stopped
+    expose:
+      - "80"
+    volumes:
+      - ./deployment/admin/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deployment/admin/api-proxy.inc:/etc/nginx/conf.d/api-proxy.inc:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      edge:
+        aliases:
+          - zag-flow-admin-web
+      internal:
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      SERVICE_ADMIN_TOKEN: ${SERVICE_ADMIN_TOKEN}
+      ROOT_PATH: ${PUBLIC_BASE_PATH-/next}
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - internal
+
+  pgadmin:
+    image: dpage/pgadmin4:9.18
+    profiles: ["tools"]
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "True"
+    ports:
+      - "127.0.0.1:5051:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+      - tools
+
+networks:
+  edge:
+    external: true
+    name: zag-flow_edge
+  internal:
+    internal: true
+  tools:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  pgadmin_data:

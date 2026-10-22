@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew ZAG Flow IP TLS certificate
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zag-flow-renew-https
+TimeoutStartSec=15min

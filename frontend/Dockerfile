@@ -1,6 +1,8 @@
 FROM node:22-alpine AS build
 WORKDIR /frontend
-COPY package.json build.mjs index.html styles.css app.js favicon.svg ./
+ARG PUBLIC_BASE_PATH=""
+ENV PUBLIC_BASE_PATH=$PUBLIC_BASE_PATH
+COPY package.json build.mjs index.html styles.css app.js admin.html admin.css admin.js behavior-metrics.js favicon.svg ./
 RUN npm run build
 
 FROM nginx:1.27-alpine

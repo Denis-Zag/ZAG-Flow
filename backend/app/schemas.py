@@ -1,6 +1,7 @@
 """Схемы проверки входных и выходных данных API."""
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -98,3 +99,43 @@ class HealthResponse(BaseModel):
 
     status: Literal["ok"] = "ok"
     database: Literal["ok"] = "ok"
+
+
+class AdminCredentials(BaseModel):
+    """Логин и пароль без нормализации самого пароля."""
+
+    username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$")
+    password: str = Field(min_length=12, max_length=128)
+
+
+class AdminRegistration(AdminCredentials):
+    """Первичное создание администратора с существующим ключом настройки."""
+
+    setup_token: str = Field(min_length=1, max_length=300)
+
+
+class CursorPoint(BaseModel):
+    """Нормализованные координаты относительно всей страницы."""
+
+    x: float = Field(ge=0, le=1, allow_inf_nan=False)
+    y: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class MetricCreate(BaseModel):
+    """Накопленные значения одного посещения в очередную секунду."""
+
+    session_id: UUID
+    sequence: int = Field(ge=1, le=100000)
+    time_on_page: int = Field(ge=0, le=86400)
+    buttons_clicked: dict[str, int] = Field(default_factory=dict, max_length=40)
+    cursor_positions: list[CursorPoint] = Field(default_factory=list, max_length=1)
+
+    @field_validator("buttons_clicked")
+    @classmethod
+    def validate_clicks(cls, value: dict[str, int]) -> dict[str, int]:
+        """Ограничить метки элементов и значения счётчиков."""
+
+        for name, count in value.items():
+            if not 1 <= len(name) <= 80 or not 0 <= count <= 100000:
+                raise ValueError("Некорректный счётчик кликов")
+        return value
